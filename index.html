@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Ristrutturazione Pro</title>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --card: #1e293b;
+            --text: #f8fafc;
+            --accent: #8b5cf6;
+            --success: #10b981;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: sans-serif; }
+        body { background: var(--bg); color: var(--text); padding: 15px; display: flex; flex-direction: column; gap: 15px; min-height: 100vh; }
+        header { background: var(--card); padding: 15px; border-radius: 10px; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.2); }
+        .main-layout { display: flex; flex-direction: column; gap: 15px; }
+        @media(min-width: 768px) { .main-layout { display: grid; grid-template-columns: 300px 1fr; } }
+        .sidebar { background: var(--card); padding: 15px; border-radius: 10px; display: flex; flex-direction: column; gap: 15px; }
+        .btn { width: 100%; padding: 12px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; color: white; background: #475569; transition: 0.2s; text-align: center; }
+        .btn-primary { background: var(--accent); }
+        .btn-success { background: var(--success); }
+        .btn-action { background: #3b82f6; }
+        .btn-upload { background: #ea580c; }
+        .canvas-area { background: #020617; border-radius: 10px; overflow: hidden; position: relative; min-height: 450px; display: flex; flex-direction: column; }
+        .view-container { flex: 1; position: relative; width: 100%; height: 100%; min-height: 400px; }
+        .bg-layer { position: absolute; width: 100%; height: 100%; object-fit: cover; z-index: 1; }
+        .color-filter { position: absolute; width: 100%; height: 100%; z-index: 2; mix-blend-mode: color; opacity: 0; pointer-events: none; }
+        .floor-grid { position: absolute; width: 100%; height: 100%; z-index: 3; pointer-events: none; opacity: 0.15; background-image: linear-gradient(#94a3b8 1px, transparent 1px), linear-gradient(90deg, #94a3b8 1px, transparent 1px); background-size: 30px 30px; transform: perspective(400px) rotateX(60deg); transform-origin: bottom; }
+        .item-furniture { position: absolute; z-index: 5; background: rgba(30,41,59,0.95); border: 2px dashed var(--accent); padding: 8px; border-radius: 5px; cursor: move; touch-action: none; font-size: 12px; font-weight: bold; box-shadow: 0 4px 10px rgba(0,0,0,0.3); color: white; display: flex; flex-direction: column; align-items: center; gap: 5px; text-align: center; }
+        .item-furniture img { max-width: 80px; max-height: 80px; object-fit: contain; pointer-events: none; display: block; }
+        .item-furniture.final-render { border-style: solid; border-color: transparent; background: rgba(15,23,42,0.85); box-shadow: 0 8px 16px rgba(0,0,0,0.5); }
+        .price-box { background: #020617; padding: 15px; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #334155; }
+        select, input { width: 100%; padding: 10px; background: #0f172a; border: 1px solid #334155; color: white; border-radius: 5px; margin-top: 5px; }
+    </style>
+</head>
+<body>
+
+<header>
+    <h2>AI Ristrutturazione Casa Pro</h2>
+</header>
+
+<div class="main-layout">
+    <div class="sidebar">
+        <div>
+            <label style="font-size:12px; font-weight:bold; color:#94a3b8;">1. SFONDO AMBIENTE</label>
+            <button class="btn btn-action" style="margin-top:5px;" onclick="initCam()">Attiva Fotocamera</button>
+            <button class="btn" style="margin-top:5px; background:#1e293b; border:1px solid #475569;" onclick="useDemo()">Usa Stanza Demo</button>
+        </div>
+
+        <div>
+            <label style="font-size:12px; font-weight:bold; color:#94a3b8;">2. CARICA MOBILI DA INTERNET</label>
+            <input type="file" id="customFurnitureInput" accept="image/*" style="display:none;" onchange="loadCustomFurniture(event)">
+            <button class="btn btn-upload" style="margin-top:5px;" onclick="document.getElementById('customFurnitureInput').click()">📁 Carica Oggetto da PC/Foto</button>
+        </div>
+
+        <div>
+            <label style="font-size:12px; font-weight:bold; color:#94a3b8;">3. INSERISCI ARREDO PREDEFINITO</label>
+            <button class="btn" style="margin-top:5px;" onclick="spawnItem('Divano Moderno', 650, 'IKEA', '')">+ Divano Comfort (€650)</button>
+            <button class="btn" style="margin-top:5px;" onclick="spawnItem('Tavolo Pranzo', 320, 'Maisons du Monde', '')">+ Tavolo Legno (€320)</button>
+        </div>
+
+        <div>
+            <label style="font-size:12px; font-weight:bold; color:#94a3b8;">4. FINITURE E PAVIMENTI</label>
+            <select id="wallSelector" onchange="changeWallColor()">
+                <option value="transparent">Nessun filtro colore</option>
+                <option value="#34d399">Verde Salvia (Boero)</option>
+                <option value="#60a5fa">Azzurro Polvere (MaxMeyer)</option>
+            </select>
+            <select id="floorSelector" style="margin-top:5px;" onchange="updateTotal()">
+                <option value="0">Nessun pavimento</option>
+                <option value="35">Parquet Rovere (€35/mq)</option>
+                <option value="22">Gres Effetto Cemento (€22/mq)</option>
+            </select>
+            <input type="number" id="mqInput" value="25" min="1" oninput="updateTotal()" placeholder="Metri quadri">
+        </div>
+
+        <button class="btn btn-primary" onclick="renderAI()">🎨 RENDI (AI Render)</button>
+        <button class="btn btn-success" onclick="downloadCSV()">📊 Scarica Lista Spesa</button>
+    </div>
+
+    <div class="canvas-area">
+        <div class="view-container" id="viewArea">
+            <div class="floor-grid" id="floorGrid"></div>
+            <div class="color-filter" id="colorFilter"></div>
+            <video id="webcam" autoplay playsinline style="position:absolute; width:100%; height:100%; object-fit:cover; z-index:1; display:none;"></video>
+            <img id="bgImg" class="bg-layer" src="https://unsplash.com" alt="Stanza">
+        </div>
+        <div class="price-box">
+            <span>Preventivo Stimato:</span>
+            <span id="priceDisplay" style="color:var(--success); font-size:20px; font-weight:bold;">€ 0.00</span>
+        </div>
+    </div>
+</div>
+
+<script>
+    let itemsInRoom = [];
+    let isRendered = false;
+
+    async function initCam() {
+        const video = document.getElementById('webcam');
+        const img = document.getElementById('bgImg');
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+            video.srcObject = stream;
+            video.style.display = "block";
+            img.style.display = "none";
+        } catch(e) {
+            alert("Usa CodePen online per sbloccare la fotocamera. Carico la stanza demo.");
+            useDemo();
+        }
+    }
+
+    function useDemo() {
+        document.getElementById('webcam').style.display = "none";
+        const img = document.getElementById('bgImg');
+        img.style.display = "block";
+        img.src = "https://unsplash.com";
+    }
+
+    function changeWallColor() {
+        const color = document.getElementById('wallSelector').value;
+        const filter = document.getElementById('colorFilter');
+        filter.style.backgroundColor = color;
+        filter.style.opacity = color === 'transparent' ? '0' : '0.4';
+    }
+
+    function loadCustomFurniture(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const name = prompt("Inserisci il nome del mobile (es. Sedia Velvet):") || "Oggetto Caricato";
+            const price = parseFloat(prompt("Inserisci il prezzo in € (solo numeri):")) || 0;
+            const shop = prompt("Inserisci il sito web/negozio:") || "Web";
+            spawnItem(name, price, shop, e.target.result);
+        };
+        reader.readAsDataURL(file);
+    }
+
+    function spawnItem(name, price, shop, imgSrc) {
+        const area = document.getElementById('viewArea');
+        const el = document.createElement('div');
+        el.className = 'item-furniture';
+        
+        if(imgSrc) {
+            el.innerHTML = `<img src="${imgSrc}"><div>${name}</div><span style="color:#f59e0b; font-size:10px;">${shop}</span>`;
+        } else {
+            el.innerHTML = `<div>${name}</div><span style="color:#f59e0b; font-size:10px;">${shop}</span>`;
+        }
+        
+        el.style.left = '60px';
+        el.style.top = '60px';
+
+        let moveHandler = (e) => {
+            const rect = area.getBoundingClientRect();
+            let clientX = e.touches ? e.touches.clientX : e.clientX;
+            let clientY = e.touches ? e.touches.clientY : e.clientY;
+            el.style.left = (clientX - rect.left - 40) + 'px';
+            el.style.top = (clientY - rect.top - 40) + 'px';
+        };
+
+        el.addEventListener('mousedown', () => window.addEventListener('mousemove', moveHandler));
+        el.addEventListener('touchstart', () => window.addEventListener('touchmove', moveHandler), {passive: true});
+        window.addEventListener('mouseup', () => window.removeEventListener('mousemove', moveHandler));
+        window.addEventListener('touchend', () => window.removeEventListener('touchmove', moveHandler));
+
+        area.appendChild(el);
+        itemsInRoom.push({ name, price, shop });
+        updateTotal();
+    }
+
+    function renderAI() {
+        isRendered = !isRendered;
+        const img = document.getElementById('bgImg')
